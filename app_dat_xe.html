@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlueDrive Masterpiece - Đẳng Cấp Gọi Xe</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --primary: #2563EB; /* Royal Blue */
+            --primary-hover: #1D4ED8; 
+            --secondary: #3B82F6;
+            --bg-glass: rgba(255, 255, 255, 0.75); 
+            --bg-light: #EFF6FF; 
+            --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
+            --text-main: #1e293b; --text-sub: #64748b;
+        }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; display: flex; height: 100vh; overflow: hidden; background: #e2e8f0;}
+        
+        #map { width: 100%; height: 100%; position: absolute; top:0; left:0; z-index: 1;}
+        
+        /* BẢNG ĐIỀU KHIỂN NỔI (APPLE STYLE) */
+        #panel-container { 
+            position: absolute; top: 20px; left: 20px; bottom: 20px; width: 400px; 
+            background: var(--bg-glass); backdrop-filter: blur(25px) saturate(200%); -webkit-backdrop-filter: blur(25px) saturate(200%);
+            border-radius: 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.12); 
+            z-index: 10; display: flex; flex-direction: column; border: 1px solid rgba(255,255,255,0.8);
+        }
+        #panel { padding: 30px 25px; overflow-y: auto; flex: 1; }
+        #panel::-webkit-scrollbar { width: 4px; }
+        #panel::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        .map-overlay { position: absolute; top: 20px; right: 20px; background: var(--bg-glass); backdrop-filter: blur(15px); padding: 15px 25px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); z-index: 10; border-left: 6px solid var(--primary); display: none; }
+        .map-overlay-time { font-size: 32px; font-weight: 900; color: var(--primary); margin: 2px 0; letter-spacing: -1px;}
+        .weather-tag { position: absolute; top: 20px; left: 440px; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); padding: 10px 20px; border-radius: 30px; z-index: 10; font-weight: 600; box-shadow: 0 4px 15px rgba(0,0,0,0.08); color: #d97706; display:flex; align-items:center; gap:8px;}
+        .chat-bubble { position: absolute; bottom: 30px; right: 20px; background: white; padding: 15px; border-radius: 20px 20px 0 20px; box-shadow: 0 15px 30px rgba(0,0,0,0.15); z-index: 10; font-size: 14px; display: none; border: 1px solid #e2e8f0; border-right: 5px solid var(--success);}
+
+        .title { font-size: 28px; font-weight: 800; color: var(--text-main); margin-bottom: 2px; letter-spacing: -0.5px;}
+        label { font-weight: 700; display: block; margin-top: 20px; margin-bottom: 8px; font-size: 13px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px;}
+        
+        .input-group { position: relative; margin-bottom: 12px; }
+        input[type="text"], select { width: 100%; padding: 16px; border-radius: 16px; border: 1px solid #e2e8f0; font-size: 15px; box-sizing: border-box; background: rgba(255,255,255,0.8); transition: 0.3s; font-family: inherit; font-weight: 500;}
+        input[type="text"]:focus, select:focus { border-color: var(--primary); background: white; outline: none; box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15); }
+        .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; border-radius: 16px; z-index: 1000; max-height: 220px; overflow-y: auto; display: none; padding: 5px; list-style: none; margin: 5px 0 0; box-shadow: 0 15px 35px rgba(0,0,0,0.15);}
+        .autocomplete-item { padding: 12px 15px; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 500; margin-bottom: 2px;}
+        .autocomplete-item:hover { background: var(--bg-light); color: var(--primary); }
+        
+        .btn-gps { width: 100%; padding: 12px; background: #e0e7ff; color: var(--primary); border: none; border-radius: 12px; font-weight: 700; cursor: pointer; margin-bottom: 15px; transition: 0.2s;}
+        .btn-gps:hover { background: #dbeafe; transform: translateY(-1px);}
+
+        /* Ô NHẬP MÃ KHUYẾN MÃI XỊN XÒ */
+        .promo-wrapper { display: flex; position: relative; }
+        .promo-wrapper input { padding-right: 120px; text-transform: uppercase; font-weight: bold;}
+        .btn-apply { position: absolute; right: 6px; top: 6px; bottom: 6px; padding: 0 15px; border-radius: 10px; background: var(--text-main); color: white; border: none; font-weight: 700; cursor: pointer; transition: 0.2s;}
+        .btn-apply:hover { background: black; }
+
+        /* GU CHUYẾN XE (THẺ TAG) */
+        .gu-box { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;}
+        .gu-option input { display: none; }
+        .gu-option span { padding: 10px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-block; transition: 0.2s; color: var(--text-sub); }
+        .gu-option input:checked + span { background: var(--bg-light); border-color: var(--primary); color: var(--primary); box-shadow: 0 4px 10px rgba(37, 99, 235, 0.15); }
+
+        /* THANH TOÁN (THẺ TAG) */
+        .payment-box { display: flex; gap: 8px; margin-top: 10px;}
+        .pay-item { flex: 1; border: 1px solid #e2e8f0; padding: 12px; border-radius: 16px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 700; background: white; transition: 0.2s; color: var(--text-sub);}
+        .pay-item.active { border-color: var(--primary); background: var(--bg-light); color: var(--primary); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); }
+
+        .btn-main, .btn-confirm, .btn-cancel { padding: 18px; border: none; border-radius: 16px; font-weight: 800; cursor: pointer; color:white; width:100%; margin-top:20px; font-size: 15px; transition: 0.3s;}
+        .btn-main { background: var(--primary); box-shadow: 0 10px 25px rgba(37, 99, 235, 0.35);}
+        .btn-main:hover { background: var(--primary-hover); transform: translateY(-3px); box-shadow: 0 12px 30px rgba(37, 99, 235, 0.45);}
+        .btn-confirm { background: linear-gradient(135deg, var(--primary), var(--secondary)); width: 48%; box-shadow: 0 10px 25px rgba(37, 99, 235, 0.35);}
+        .btn-confirm:hover { transform: translateY(-2px); }
+        .btn-cancel { background: white; color: var(--text-sub); width: 48%; border: 1px solid #e2e8f0;}
+        .btn-cancel:hover { background: #f8fafc; }
+
+        #radar-ui { display: none; height: 100%; flex-direction: column; justify-content: center; align-items: center; text-align:center;}
+        .radar { width: 90px; height: 90px; border: 4px solid #dbeafe; border-radius: 50%; border-top-color: var(--primary); animation: spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite; margin: 0 auto 25px;}
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* BIÊN LAI TOÀN MÀN HÌNH (APPLE WALLET STYLE) */
+        #full-screen-bill { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); z-index: 9999; justify-content: center; align-items: center; opacity: 0; transition: 0.4s; overflow-y:auto;}
+        .receipt-card { background: #f8fafc; border-radius: 30px; box-shadow: 0 30px 60px rgba(0,0,0,0.3); width: 100%; max-width: 480px; overflow: hidden; margin: 20px; position: relative;}
+        .receipt-header { background: linear-gradient(135deg, var(--primary), var(--secondary)); padding: 35px 25px 25px; color: white; text-align: center; border-radius: 0 0 30px 30px; box-shadow: 0 10px 20px rgba(37,99,235,0.2);}
+        .receipt-body { padding: 30px 25px; }
+        .total-price { background: white; border-radius: 20px; padding: 25px; text-align: center; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.03);}
+        
+        .rating-box { display: flex; flex-direction: row-reverse; justify-content: center; gap: 10px; font-size: 38px; cursor: pointer; margin-bottom: 20px; }
+        .rating-box span { color: #e2e8f0; transition: 0.2s; }
+        .rating-box span:hover, .rating-box span:hover ~ span, .rating-box span.active, .rating-box span.active ~ span { color: #f59e0b; text-shadow: 0 0 15px rgba(245, 158, 11, 0.4); transform: scale(1.1);}
+        
+        .tip-group { display: flex; justify-content: space-between; margin-bottom: 25px; gap: 10px;}
+        .tip-btn { flex: 1; padding: 14px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; cursor: pointer; text-align: center; font-weight: 700; color: var(--text-sub); transition: 0.2s;}
+        .tip-btn.active { background: var(--bg-light); border-color: var(--primary); color: var(--primary); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); transform: translateY(-2px);}
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="weather-tag">☀️ Đang nắng nóng (35°C)</div>
+    <div id="overlay-eta" class="map-overlay">
+        <div id="eta-title" style="font-size:12px; font-weight:800; color:var(--text-sub);">DỰ KIẾN</div>
+        <div id="eta-time" class="map-overlay-time">-- Phút</div>
+        <div id="eta-desc" style="font-size:14px; font-weight:700; color:var(--text-main);">Đang tính toán...</div>
+    </div>
+    <div id="driver-chat" class="chat-bubble">
+        <b style="color:var(--primary); font-size: 15px;">Tài xế Nguyễn Hoàng K</b><br>
+        <span style="color:var(--text-main);">Tôi đang chạy tới điểm đón nhé! Vui lòng đợi xíu.</span>
+    </div>
+
+    <div id="panel-container">
+        <div id="panel">
+            <div id="booking-ui">
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div class="title">BlueDrive</div>
+                        <div style="font-size:14px; color:var(--text-sub); font-weight: 500;">Đi muôn nơi, trải nghiệm tuyệt vời.</div>
+                    </div>
+                    <div style="font-size: 40px;">🚙</div>
+                </div>
+                
+                <label>ĐIỂM ĐÓN CỦA BẠN</label>
+                <button class="btn-gps" onclick="getLocation()">🎯 Định vị tự động GPS</button>
+                <div class="input-group">
+                    <input type="text" id="pickup" placeholder="Tìm điểm đón..." oninput="handleInput(event, 'pickup-list')">
+                    <ul id="pickup-list" class="autocomplete-list"></ul>
+                </div>
+
+                <label>BẠN MUỐN ĐI ĐÂU?</label>
+                <div class="input-group">
+                    <input type="text" id="dropoff" placeholder="Tìm điểm đến (VD: Bến Thành)..." oninput="handleInput(event, 'dropoff-list')">
+                    <ul id="dropoff-list" class="autocomplete-list"></ul>
+                </div>
+
+                <label>CHỌN LOẠI XE</label>
+                <select id="service">
+                    <option value="Xe Máy">🛵 BlueBike (Luồn lách nhanh)</option>
+                    <option value="Ô Tô 4 Chỗ" selected>🚗 BlueCar 4 Chỗ (Thoải mái)</option>
+                    <option value="Xe Sang">💎 BlueLuxury (Sang trọng)</option>
+                </select>
+
+                <label>MÃ KHUYẾN MÃI</label>
+                <div class="promo-wrapper">
+                    <input type="text" id="promo-code" placeholder="Nhập mã khuyến mãi...">
+                    <button class="btn-apply" onclick="applyPromo()">ÁP DỤNG</button>
+                </div>
+                <div id="promo-msg" style="font-size:13px; font-weight:700; margin-top:8px; display:none;"></div>
+
+                <label>GU CỦA BẠN</label>
+                <div class="gu-box">
+                    <label class="gu-option"><input type="checkbox" id="opt-quiet"><span>🤫 Yên tĩnh</span></label>
+                    <label class="gu-option"><input type="checkbox" id="opt-ac"><span>❄️ Lạnh sâu</span></label>
+                    <label class="gu-option"><input type="checkbox" id="opt-music"><span>🎵 Nhạc Chill</span></label>
+                    <label class="gu-option"><input type="checkbox" id="opt-pet"><span>🐾 Thú cưng</span></label>
+                </div>
+
+                <label>THANH TOÁN</label>
+                <div class="payment-box">
+                    <div class="pay-item active" onclick="selectPay(this)">💵 Tiền mặt</div>
+                    <div class="pay-item" onclick="selectPay(this)">📱 MoMo</div>
+                    <div class="pay-item" onclick="selectPay(this)">💳 Thẻ Visa</div>
+                </div>
+
+                <div id="result-area"></div>
+                <div id="action-box">
+                    <button class="btn-main" onclick="processRouting()">TÌM ĐƯỜNG & BÁO GIÁ</button>
+                </div>
+            </div>
+
+            <div id="radar-ui">
+                <div class="radar"></div>
+                <b style="font-size: 24px; color: var(--primary);">Đang tìm tài xế...</b>
+                <span style="font-size: 14px; margin-top:10px; color:var(--text-sub); font-weight: 500;">Hệ thống đang quét các xe gần bạn nhất</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- MÀN HÌNH BIÊN LAI -->
+    <div id="full-screen-bill">
+        <div class="receipt-card" id="receipt-card">
+            <div class="receipt-header">
+                <div style="font-size: 45px; margin-bottom: 5px; text-shadow: 0 5px 15px rgba(0,0,0,0.2);">✨</div>
+                <div style="font-size: 26px; font-weight: 900; letter-spacing: -0.5px;">Chuyến đi hoàn tất</div>
+                <div style="font-size: 14px; opacity:0.9; font-weight: 500; margin-top: 5px;">Hóa đơn điện tử BlueDrive</div>
+            </div>
+            <div class="receipt-body">
+                <div class="total-price">
+                    <div style="color: var(--text-sub); font-weight: 800; font-size: 12px; letter-spacing: 1px;">TỔNG THANH TOÁN</div>
+                    <div id="bill-total" style="color: var(--primary); font-size: 46px; font-weight: 900; margin: 8px 0; letter-spacing: -1px;">0đ</div>
+                    <div id="bill-promo-tag" style="color: var(--success); font-weight: 800; font-size: 14px; display: none; margin-bottom:8px; background: #ecfdf5; padding: 5px 10px; border-radius: 10px; display: inline-block;"></div>
+                    <div style="display: flex; justify-content: center; gap: 10px; margin-top: 5px;">
+                        <div id="bill-datetime" style="color: var(--text-sub); font-size: 13px; font-family: monospace; font-weight:bold; background: #f1f5f9; padding: 6px 12px; border-radius: 12px;"></div>
+                        <div id="bill-pay-method" style="background: var(--bg-light); color: var(--primary); padding:6px 12px; border-radius:12px; font-size: 13px; font-weight: 800;"></div>
+                    </div>
+                </div>
+
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 20px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+                    <div style="border-left: 3px solid var(--primary); padding-left:15px; margin-bottom:15px;">
+                        <span style="font-size:12px; color:var(--text-sub); font-weight: 700;">ĐIỂM ĐÓN</span><br>
+                        <b id="bill-pickup" style="font-size:15px; color:var(--text-main);"></b>
+                    </div>
+                    <div style="border-left: 3px solid var(--secondary); padding-left:15px;">
+                        <span style="font-size:12px; color:var(--text-sub); font-weight: 700;">ĐIỂM ĐẾN</span><br>
+                        <b id="bill-dropoff" style="font-size:15px; color:var(--text-main);"></b>
+                    </div>
+                </div>
+
+                <div id="bill-gu-list" style="background:#fffbeb; padding:15px; border-radius:16px; font-size:14px; font-weight:700; color:#d97706; margin-bottom:20px; display:none; border: 1px dashed #fcd34d;"></div>
+                
+                <div style="display:flex; gap:12px; margin-bottom:25px;">
+                    <div style="flex:1; background:#f8fafc; padding:15px; border-radius:16px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:var(--text-sub); font-weight: 700; margin-bottom: 5px;">TÀI XẾ</div>
+                        <b style="font-size:15px;">Nguyễn Hoàng K</b><br>
+                        <span style="color:var(--primary);font-size:14px;font-weight:900;">59A-283.91</span>
+                    </div>
+                    <div style="flex:1; background:#f8fafc; padding:15px; border-radius:16px; border:1px solid #e2e8f0;">
+                        <div style="font-size:11px; color:var(--text-sub); font-weight: 700; margin-bottom: 5px;">HÀNH TRÌNH</div>
+                        <b id="bill-dist" style="font-size:15px;"></b><br>
+                        <span id="bill-duration" style="font-size:14px;font-weight:900;color:var(--primary);"></span>
+                    </div>
+                </div>
+
+                <div style="text-align:center;">
+                    <b style="font-size:16px; color: var(--text-main);">Đánh giá trải nghiệm</b>
+                    <div class="rating-box" id="rating-stars">
+                        <span data-v="5">★</span><span data-v="4">★</span><span data-v="3">★</span><span data-v="2">★</span><span data-v="1">★</span>
+                    </div>
+                    <b style="font-size:13px; color:var(--text-sub); display:block; margin-bottom:10px;">Tặng Tip khích lệ tài xế</b>
+                    <div class="tip-group">
+                        <div class="tip-btn active">Không Tip</div><div class="tip-btn">10K</div><div class="tip-btn">20K</div>
+                    </div>
+                    <!-- NÚT GỬI ĐÁNH GIÁ -->
+                    <button id="btn-submit-review" class="btn-main" style="margin-top:5px; box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);" onclick="submitReview()">GỬI ĐÁNH GIÁ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var map = L.map('map', {zoomControl: false}).setView([10.7769, 106.7009], 13);
+        L.control.zoom({position: 'bottomright'}).addTo(map);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '© BlueDrive' }).addTo(map);
+
+        var currentRoute = null, driverRouteLayer = null, carMarker = null, startMarker = null, endMarker = null;
+        var tripData = {}, userCoords = null, dummyCars = [];
+        var selectedPayment = "💵 Tiền mặt";
+        
+        var discountRate = 0;
+        var appliedCode = "";
+
+        const DB = {
+            "cơ sở a": {lat: 10.783230, lon: 106.694668, name: "ĐH Kinh Tế (UEH) - Cơ Sở A"},
+            "cơ sở b": {lat: 10.761366, lon: 106.668249, name: "ĐH Kinh Tế (UEH) - Cơ Sở B"},
+            "cơ sở c": {lat: 10.773408, lon: 106.677657, name: "ĐH Kinh Tế (UEH) - Cơ Sở C"},
+            "bách khoa": {lat: 10.7733, lon: 106.6599, name: "Đại học Bách Khoa TP.HCM"},
+            "khtn": {lat: 10.7628, lon: 106.6822, name: "ĐH Khoa Học Tự Nhiên"},
+            "tân sơn nhất": {lat: 10.8149, lon: 106.6634, name: "Sân bay Tân Sơn Nhất"},
+            "bến thành": {lat: 10.7725, lon: 106.6980, name: "Chợ Bến Thành, Q1"}
+        };
+
+        const stars = document.querySelectorAll('#rating-stars span');
+        stars.forEach(star => { star.addEventListener('click', function() { stars.forEach(s => s.classList.remove('active')); this.classList.add('active'); }); });
+        document.querySelectorAll('.tip-btn').forEach(btn => { btn.addEventListener('click', function() { document.querySelectorAll('.tip-btn').forEach(b => b.classList.remove('active')); this.classList.add('active'); }); });
+
+        function selectPay(el) {
+            document.querySelectorAll('.pay-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            selectedPayment = el.innerText;
+        }
+
+        function applyPromo() {
+            let code = document.getElementById('promo-code').value.toUpperCase().trim();
+            let msg = document.getElementById('promo-msg');
+            msg.style.display = "block";
+            
+            if(code === "AIDRIVE") {
+                discountRate = 0.15; appliedCode = "AIDRIVE";
+                msg.style.color = "var(--success)";
+                msg.innerHTML = "🎉 Áp dụng thành công! Giảm 15%";
+            } else if (code === "") {
+                discountRate = 0; appliedCode = ""; msg.style.display = "none";
+            } else {
+                discountRate = 0; appliedCode = "";
+                msg.style.color = "var(--danger)";
+                msg.innerHTML = "❌ Mã không hợp lệ!";
+            }
+        }
+
+        let searchTimeout = null;
+        function handleInput(e, listId) {
+            const val = e.target.value.toLowerCase();
+            const list = document.getElementById(listId);
+            list.innerHTML = "";
+            if(val.length < 2) { list.style.display="none"; return; }
+            
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(async () => {
+                let found = [];
+                for(let k in DB) { if(k.includes(val) || DB[k].name.toLowerCase().includes(val)) found.push(DB[k].name); }
+                try {
+                    let res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(val + " Hồ Chí Minh")}&limit=4`);
+                    let data = await res.json();
+                    data.features.forEach(f => {
+                        let name = f.properties.name || f.properties.street;
+                        let ctx = f.properties.district || f.properties.city || "";
+                        let fullName = name + (ctx ? `, ${ctx}` : "");
+                        if(name && !found.includes(fullName)) found.push(fullName);
+                    });
+                } catch(err) {}
+
+                if(found.length > 0) {
+                    list.style.display="block";
+                    found.forEach(name => {
+                        let li = document.createElement("li"); li.className="autocomplete-item"; li.innerHTML = `📍 <b>${name}</b>`;
+                        li.onclick = () => { e.target.value = name; list.style.display="none"; };
+                        list.appendChild(li);
+                    });
+                } else { list.style.display="none"; }
+            }, 300); 
+        }
+        document.addEventListener('click', e => { if(!e.target.closest('.input-group')) { document.getElementById('pickup-list').style.display='none'; document.getElementById('dropoff-list').style.display='none'; }});
+
+        function getLocation() {
+            let input = document.getElementById('pickup');
+            input.value = "Đang lấy vị trí GPS...";
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        userCoords = [pos.coords.latitude, pos.coords.longitude];
+                        input.value = "📍 Vị trí hiện tại của bạn";
+                        map.flyTo(userCoords, 16, {duration: 1.5});
+                        if(startMarker) map.removeLayer(startMarker);
+                        startMarker = L.marker(userCoords).addTo(map);
+                    },
+                    () => { alert("Lỗi: Bạn chưa cấp quyền định vị!"); input.value = ""; }
+                );
+            }
+        }
+
+        async function getCoords(q) {
+            if (q === "📍 Vị trí hiện tại của bạn" && userCoords) return { lat: userCoords[0], lon: userCoords[1], name: "Vị trí của bạn" };
+            let qL = q.toLowerCase();
+            for (let k in DB) { if (qL.includes(k) || DB[k].name.toLowerCase()===qL) return DB[k]; }
+            try {
+                let res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q + " Việt Nam")}&limit=1`);
+                let data = await res.json();
+                if (data && data.features.length > 0) return { lat: data.features[0].geometry.coordinates[1], lon: data.features[0].geometry.coordinates[0], name: data.features[0].properties.name || q };
+            } catch(e) {} return null; 
+        }
+
+        function spawnCars(lat, lon) {
+            dummyCars.forEach(m => map.removeLayer(m)); dummyCars = [];
+            var ic = L.icon({ iconUrl: "https://cdn-icons-png.flaticon.com/512/3085/3085330.png", iconSize: [28, 28]});
+            for(let i=0; i<5; i++) {
+                dummyCars.push(L.marker([lat + (Math.random()-0.5)*0.015, lon + (Math.random()-0.5)*0.015], {icon: ic}).addTo(map));
+            }
+        }
+
+        async function processRouting() {
+            var p = document.getElementById('pickup').value, d = document.getElementById('dropoff').value;
+            if(!p || !d) { alert("Thiếu địa chỉ Đón/Đến!"); return; }
+            
+            document.getElementById('action-box').innerHTML = `<button class="btn-main" style="background:#94a3b8; box-shadow:none;">ĐANG XỬ LÝ...</button>`;
+            
+            try {
+                let p_coord = await getCoords(p);
+                let d_coord = await getCoords(d);
+                if(!p_coord || !d_coord) throw "Không xác định được tọa độ, vui lòng gõ rõ hơn!";
+
+                let res = await fetch(`https://router.project-osrm.org/route/v1/driving/${p_coord.lon},${p_coord.lat};${d_coord.lon},${d_coord.lat}?overview=full&geometries=geojson`);
+                let data = await res.json();
+                if(!data.routes) throw "Lỗi tìm đường!";
+                
+                let tripCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                let dist = data.routes[0].distance/1000;
+                let eta = Math.ceil(data.routes[0].duration/60);
+
+                let dr_lat = p_coord.lat + 0.01, dr_lon = p_coord.lon + 0.01;
+                let dr_res = await fetch(`https://router.project-osrm.org/route/v1/driving/${dr_lon},${dr_lat};${p_coord.lon},${p_coord.lat}?overview=full&geometries=geojson`);
+                let dr_data = await dr_res.json();
+                let drCoords = dr_data.routes ? dr_data.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]) : [[dr_lat,dr_lon],[p_coord.lat,p_coord.lon]];
+                let drEta = dr_data.routes ? Math.ceil(dr_data.routes[0].duration/60) : 2;
+
+                if(currentRoute) map.removeLayer(currentRoute);
+                if(driverRouteLayer) map.removeLayer(driverRouteLayer);
+                if(startMarker) map.removeLayer(startMarker);
+                if(endMarker) map.removeLayer(endMarker);
+                if(carMarker) map.removeLayer(carMarker);
+
+                currentRoute = L.polyline(tripCoords, {color: '#0062E6', weight: 6, opacity: 0.8}).addTo(map);
+                startMarker = L.marker([p_coord.lat, p_coord.lon], {icon: L.divIcon({className:'custom-div-icon', html:"<div style='background:#0062E6;width:16px;height:16px;border-radius:50%;border:3px solid white; box-shadow:0 0 8px rgba(0,0,0,0.4);'></div>"})}).addTo(map);
+                endMarker = L.marker([d_coord.lat, d_coord.lon], {icon: L.divIcon({className:'custom-div-icon', html:"<div style='background:#33AEFF;width:22px;height:22px;border-radius:50%;border:3px solid white; box-shadow:0 0 8px rgba(0,0,0,0.4);'></div>"})}).addTo(map);
+                map.flyToBounds(currentRoute.getBounds(), {padding:[40,40], duration:1.5});
+
+                spawnCars(p_coord.lat, p_coord.lon);
+
+                let service = document.getElementById('service').value;
+                let rate = service.includes("Máy") ? 8000 : (service.includes("Sang") ? 22000 : 13000);
+                let baseTotal = Math.round(dist * rate * 1.3); // X1.3 do thời tiết nắng nóng
+                
+                let discountAmt = Math.round(baseTotal * discountRate);
+                let finalTotal = baseTotal - discountAmt;
+
+                let gu = [];
+                if(document.getElementById('opt-quiet').checked) gu.push("🤫 Yên tĩnh");
+                if(document.getElementById('opt-ac').checked) gu.push("❄️ Lạnh sâu");
+                if(document.getElementById('opt-music').checked) gu.push("🎵 Nhạc");
+                if(document.getElementById('opt-pet').checked) gu.push("🐾 Thú cưng");
+
+                tripData = { dist: dist, total: finalTotal, discount: discountAmt, promo: appliedCode, service: service, eta: eta, drEta: drEta, p_name: p, d_name: d, tripCoords: tripCoords, drCoords: drCoords, gu: gu, pay: selectedPayment };
+
+                let promoHtml = discountAmt > 0 ? `<div style='display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;font-weight:600;'><span>Mã giảm giá:</span><b style='color:var(--success);'>-${discountAmt.toLocaleString('vi-VN')} đ</b></div>` : '';
+                
+                document.getElementById('result-area').innerHTML = `
+                    <div style='background: white; border: 2px solid var(--primary); padding: 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(37,99,235,0.15); margin-top:20px;'>
+                        <div style='display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;font-weight:600;'><span>Quãng đường:</span><b style='color:var(--text-main);'>${dist.toFixed(1)} km</b></div>
+                        <div style='display:flex;justify-content:space-between;font-size:14px;margin-bottom:8px;font-weight:600;'><span>Thời gian:</span><b style='color:var(--text-main);'>~${eta} phút</b></div>
+                        ${promoHtml}
+                        <div style='border-top:2px dashed #e2e8f0;padding-top:15px;margin-top:12px;display:flex;justify-content:space-between;align-items:center;'>
+                            <b style="font-size:16px;">TỔNG TIỀN:</b><b style='color:var(--primary);font-size:28px; letter-spacing:-1px;'>${finalTotal.toLocaleString('vi-VN')} đ</b>
+                        </div>
+                    </div>`;
+                document.getElementById('action-box').innerHTML = `
+                    <div style="display:flex; gap:12px; margin-top:20px;">
+                        <button class="btn-cancel" onclick="resetUI()">HỦY</button>
+                        <button class="btn-confirm" onclick="confirmRide()">GỌI XE NGAY</button>
+                    </div>`;
+            } catch (err) { alert(err); resetUI(); }
+        }
+
+        function resetUI() {
+            document.getElementById('result-area').innerHTML = "";
+            document.getElementById('action-box').innerHTML = `<button class="btn-main" onclick="processRouting()">TÌM ĐƯỜNG & BÁO GIÁ</button>`;
+        }
+
+        function confirmRide() {
+            document.getElementById('booking-ui').style.display = 'none';
+            document.getElementById('radar-ui').style.display = 'flex';
+            
+            setTimeout(() => {
+                document.getElementById('radar-ui').style.display = 'none';
+                document.getElementById('booking-ui').style.display = 'block';
+                document.getElementById('action-box').innerHTML = "";
+                dummyCars.forEach(m => map.removeLayer(m));
+                
+                driverRouteLayer = L.polyline(tripData.drCoords, {color: '#64748b', weight: 4, dashArray: '8,8'}).addTo(map);
+                let ic = tripData.service.includes("Máy") ? "https://cdn-icons-png.flaticon.com/512/7191/7191059.png" : "https://cdn-icons-png.flaticon.com/512/3085/3085330.png";
+                carMarker = L.marker(tripData.drCoords[0], {icon: L.icon({iconUrl: ic, iconSize: [48,48], className: 'drop-shadow'})}).addTo(map);
+
+                document.getElementById('overlay-eta').style.display = 'block';
+                
+                let chat = document.getElementById('driver-chat');
+                chat.style.display = 'block';
+                setTimeout(()=> chat.style.display = 'none', 6000);
+
+                document.getElementById('eta-title').innerText = "TÀI XẾ SẼ ĐẾN TRONG";
+                document.getElementById('eta-time').innerText = tripData.drEta + " Phút";
+                document.getElementById('eta-desc').innerText = "Vui lòng di chuyển ra điểm đón";
+                
+                animatePath(tripData.drCoords, 60, () => {
+                    if(driverRouteLayer) map.removeLayer(driverRouteLayer);
+                    document.getElementById('eta-title').innerText = "TRẠNG THÁI";
+                    document.getElementById('eta-time').innerText = "Đã đến!";
+                    document.getElementById('eta-desc').innerText = "Tài xế đang đợi bạn";
+                    
+                    setTimeout(() => {
+                        document.getElementById('eta-title').innerText = "DỰ KIẾN ĐẾN NƠI";
+                        document.getElementById('eta-time').innerText = tripData.eta + " Phút";
+                        document.getElementById('eta-desc').innerText = "Chúc bạn đi đường vui vẻ";
+                        
+                        animatePath(tripData.tripCoords, 90, () => {
+                            showFullScreenBill();
+                        });
+                    }, 2000);
+                });
+            }, 2500);
+        }
+
+        function animatePath(coords, speed, cb) {
+            let i = 0; let iv = setInterval(() => {
+                if(i >= coords.length) { clearInterval(iv); if(cb) cb(); return; }
+                carMarker.setLatLng(coords[i]); i++;
+            }, speed);
+        }
+
+        function showFullScreenBill() {
+            document.getElementById('overlay-eta').style.display = 'none';
+            
+            var now = new Date();
+            var hours = now.getHours().toString().padStart(2, '0');
+            var minutes = now.getMinutes().toString().padStart(2, '0');
+            var day = now.getDate().toString().padStart(2, '0');
+            var month = (now.getMonth() + 1).toString().padStart(2, '0');
+            var datetimeStr = `${hours}:${minutes} - ${day}/${month}/${now.getFullYear()}`;
+            
+            document.getElementById('bill-total').innerText = tripData.total.toLocaleString('vi-VN') + "đ";
+            document.getElementById('bill-datetime').innerText = datetimeStr; 
+            document.getElementById('bill-pay-method').innerHTML = `💳 ${tripData.pay}`;
+            
+            var promoTag = document.getElementById('bill-promo-tag');
+            if(tripData.discount > 0) {
+                promoTag.style.display = 'inline-block';
+                promoTag.innerText = `🎁 Giảm ${tripData.discount.toLocaleString('vi-VN')}đ (Mã: ${tripData.promo})`;
+            } else { promoTag.style.display = 'none'; }
+
+            document.getElementById('bill-pickup').innerText = tripData.p_name;
+            document.getElementById('bill-dropoff').innerText = tripData.d_name;
+            document.getElementById('bill-dist').innerText = tripData.dist.toFixed(1) + " km";
+            document.getElementById('bill-duration').innerText = "~" + tripData.eta + " phút";
+
+            var guBox = document.getElementById('bill-gu-list');
+            if(tripData.gu.length > 0) { guBox.style.display = 'block'; guBox.innerHTML = "✨ " + tripData.gu.join(" • "); }
+
+            document.querySelectorAll('#rating-stars span').forEach(s => s.classList.remove('active'));
+            document.querySelector('#rating-stars span[data-v="5"]').classList.add('active');
+
+            let btn = document.getElementById('btn-submit-review');
+            btn.style.background = "var(--primary)";
+            btn.innerHTML = "GỬI ĐÁNH GIÁ";
+            btn.onclick = submitReview;
+
+            var bs = document.getElementById('full-screen-bill');
+            bs.style.display = 'flex';
+            setTimeout(() => { bs.style.opacity = '1'; document.getElementById('receipt-card').style.transform = 'translateY(0)'; }, 50);
+        }
+
+        // 2 BƯỚC GỬI ĐÁNH GIÁ RỒI MỚI ĐƯỢC ĐẶT LẠI
+        function submitReview() {
+            let btn = document.getElementById('btn-submit-review');
+            btn.style.background = "var(--success)";
+            btn.style.boxShadow = "0 10px 25px rgba(16, 185, 129, 0.4)";
+            btn.innerHTML = "✅ ĐÃ GỬI - ĐẶT CHUYẾN MỚI";
+            btn.onclick = () => { location.reload(); };
+        }
+    </script>
+</body>
+</html>
